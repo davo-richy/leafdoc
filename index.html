@@ -25,7 +25,7 @@
     main{max-width:640px;margin:0 auto;padding:24px 16px 48px}
     .hidden{display:none!important}
   </style>
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=6" />
 </head>
 <body>
   <!-- 20px, 1.5px-stroke icons. Inline so they need no network request or library. -->
@@ -75,6 +75,10 @@
       <path d="M6 8V4h8v4" />
       <path d="M6 14H4.5a.5.5 0 0 1-.5-.5v-5A.5.5 0 0 1 4.5 8h11a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-.5.5H14" />
       <path d="M6 12h8v4H6z" />
+    </symbol>
+    <symbol id="i-download" viewBox="0 0 20 20">
+      <path d="M10 3v8M6.5 8 10 11.5 13.5 8" />
+      <path d="M4 14v2.5h12V14" />
     </symbol>
     <symbol id="i-calendar" viewBox="0 0 20 20">
       <rect x="3.5" y="5" width="13" height="11" rx="1" />
@@ -150,6 +154,23 @@
       <p id="micMsg" class="hint hidden" role="status"></p>
 
       <h2 class="step"><span class="step-num" aria-hidden="true">3</span><span>Options</span></h2>
+
+      <label for="regionSel" class="label">Region</label>
+      <select id="regionSel" class="select">
+        <option value="Nigeria" selected>Nigeria</option>
+        <option>Ghana</option>
+        <option>Kenya</option>
+        <option>Uganda</option>
+        <option>Tanzania</option>
+        <option>South Africa</option>
+        <option>India</option>
+        <option>Brazil</option>
+        <option>United States</option>
+        <option>United Kingdom</option>
+        <option>Other</option>
+      </select>
+      <p class="hint">Advice uses materials and product names common where you grow.</p>
+
       <label class="check">
         <input type="checkbox" id="useWeather" />
         <span>
@@ -157,6 +178,27 @@
           <span class="hint">Asks for your location once. Only a short weather summary is sent with the photos.</span>
         </span>
       </label>
+
+      <label class="check">
+        <input type="checkbox" id="lowData" />
+        <span>
+          Low-data mode
+          <span class="hint">Sends smaller photos, about half the data. Useful on metered connections.</span>
+        </span>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="audioFirst" />
+        <span>
+          Read results aloud
+          <span class="hint">Starts the spoken summary as soon as a result arrives.</span>
+        </span>
+      </label>
+
+      <div id="queueNote" class="notice notice-action hidden" role="status">
+        <p id="queueText"></p>
+        <button id="queueSend" class="btn secondary small-btn" type="button">Send now</button>
+      </div>
 
       <div class="actionbar">
         <p id="scanHint" class="hint" aria-live="polite"></p>
@@ -192,6 +234,7 @@
         <p class="eyebrow">Your plant</p>
         <h1 id="plantName">—</h1>
         <p id="statusPill" class="status"></p>
+        <p id="fromQueue" class="hint hidden">Sent from the scan saved on your phone.</p>
         <p id="summary"></p>
         <div class="conf">
           <div class="conf-row">
@@ -200,6 +243,7 @@
           </div>
           <div class="bar"><div id="confBar"></div></div>
         </div>
+        <p id="confNote" class="notice hidden"></p>
         <p id="urgent" class="notice hidden"></p>
         <div class="btnrow">
           <button id="speakBtn" class="btn secondary" type="button">
@@ -210,6 +254,13 @@
           </button>
         </div>
         <p id="voiceNote" class="hint hidden"></p>
+      </section>
+
+      <section id="triageCard" class="block triage">
+        <h2 id="triageTitle"></h2>
+        <p id="triageLine" class="lede"></p>
+        <ul id="triageSteps" class="triage-steps"></ul>
+        <p id="eatNote" class="notice hidden"></p>
       </section>
 
       <section id="followCard" class="block hidden">
@@ -228,9 +279,9 @@
       </section>
 
       <section id="treatCard" class="block hidden">
-        <h2>What to do</h2>
+        <h2>Treatment options</h2>
         <div class="tabs" role="tablist" aria-label="Treatment type">
-          <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="organic">Organic</button>
+          <button class="tab active" type="button" role="tab" aria-selected="true" data-tab="organic">Household</button>
           <button class="tab" type="button" role="tab" aria-selected="false" data-tab="chemical">Chemical</button>
           <button class="tab" type="button" role="tab" aria-selected="false" data-tab="prevention">Prevention</button>
         </div>
@@ -267,12 +318,23 @@
         <p id="compareText"></p>
       </section>
 
+      <section id="shareCard" class="block">
+        <h2>Share this result</h2>
+        <p class="hint">Send the summary on WhatsApp, save a picture, or print it.</p>
+        <div class="btnrow">
+          <button id="waBtn" class="btn secondary" type="button">WhatsApp</button>
+          <button id="imgBtn" class="btn secondary" type="button">Save as image</button>
+          <button id="printBtn" class="btn secondary" type="button">Print</button>
+        </div>
+        <p class="hint"><a href="accuracy.html">How accurate is LeafDoc?</a></p>
+      </section>
+
       <p class="disclaimer">LeafDoc gives AI-generated guidance, not a laboratory diagnosis. For serious or spreading problems, consult a local agricultural extension officer or plant pathologist.</p>
 
       <div class="actionbar">
         <div class="btnrow">
           <button id="shareBtn" class="btn secondary" type="button">
-            <svg class="ic" aria-hidden="true"><use href="#i-print" /></svg> Save report
+            <svg class="ic" aria-hidden="true"><use href="#i-download" /></svg> Save image
           </button>
           <button id="newBtn" class="btn primary" type="button">New scan</button>
         </div>
@@ -286,6 +348,10 @@
         <button id="historyClose" class="iconbtn" type="button" aria-label="Close" data-i18n-label="close">
           <svg class="ic" aria-hidden="true"><use href="#i-x" /></svg>
         </button>
+      </div>
+      <div id="plantsWrap" class="hidden">
+        <h3>My plants</h3>
+        <div id="plantsList" class="plants"></div>
       </div>
       <div id="historyList"></div>
       <div id="historyEmpty" class="empty hidden">
@@ -309,10 +375,11 @@
     <span id="netStatus" class="hidden">Offline. Saved scans still open.</span>
     <small>Photos go to Google Gemini for analysis and are not stored on our server. Scan history stays on this device.</small>
     <small>Built for the STEM2Connect AI Hackathon · Powered by Google Gemini · Weather by <a href="https://open-meteo.com" rel="noopener" target="_blank">Open-Meteo</a></small>
+    <small><a href="accuracy.html">How accurate is LeafDoc?</a></small>
   </footer>
 
   <p id="toast" class="toast hidden" role="status" aria-live="polite"></p>
 
-  <script type="module" src="app.js?v=5"></script>
+  <script type="module" src="app.js?v=6"></script>
 </body>
 </html>
