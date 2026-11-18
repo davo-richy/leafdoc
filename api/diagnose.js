@@ -6,6 +6,9 @@ export const config = { maxDuration: 60 };
 const MAX_IMAGES = 4;
 const MAX_B64_CHARS = 2_000_000; // ~1.5MB per image after client-side resize
 
+// Fixed list: the region is dropped into the prompt, so it must not be free text.
+const REGIONS = ["Nigeria", "Ghana", "Kenya", "Uganda", "Tanzania", "South Africa", "India", "Brazil", "United States", "United Kingdom", "Other"];
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -36,6 +39,7 @@ export default async function handler(req, res) {
       apiKey,
       model: process.env.GEMINI_MODEL,
       language: clean(body.language, 40) || "English",
+      region: REGIONS.includes(body.region) ? body.region : "",
       images: images.map((i) => ({ mime: clean(i.mime, 30) || "image/jpeg", data: i.data })),
       notes: clean(body.notes, 800),
       answers,
