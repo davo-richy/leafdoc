@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How accurate is LeafDoc?</title>
+  <meta name="description" content="What LeafDoc measures, how the accuracy test works, and the current result: not yet measured." />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#131411" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <script>
+    try {
+      var saved = localStorage.getItem("leafdoc.theme");
+      document.documentElement.dataset.theme =
+        saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="style.css?v=6" />
+  <style>
+    .prose { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+    .prose h2 { margin-top: 32px; }
+    .prose p, .prose li { color: var(--text); }
+    .prose .hint, .prose figcaption { color: var(--muted); }
+    .prose ul { padding-left: 24px; }
+    .status-box {
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--amber-line);
+      border-left: 3px solid var(--amber);
+      border-radius: var(--radius);
+      background: var(--amber-bg);
+      color: var(--amber);
+    }
+    .status-box strong { display: block; font-size: 20px; }
+    .status-box p { color: var(--amber); margin: 4px 0 0; }
+    pre {
+      overflow-x: auto;
+      margin: 8px 0 0;
+      padding: 12px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <span class="brand">LeafDoc</span>
+      <a class="iconbtn" href="./" aria-label="Back to LeafDoc">Back</a>
+    </div>
+  </header>
+
+  <main class="prose">
+    <h1>How accurate is LeafDoc?</h1>
+    <p class="lede">A photo is not a laboratory test. This page says exactly what we have measured, and what we have not.</p>
+
+    <div class="status-box" role="status">
+      <strong>Not yet measured</strong>
+      <p>The labelled test set has not been run, so LeafDoc has no accuracy figure to publish.</p>
+    </div>
+
+    <h2>What we will report</h2>
+    <p>A top-1 score on 30–50 labelled <a href="https://www.kaggle.com/datasets/abdallahalidev/plantvillage-dataset" rel="noopener" target="_blank">PlantVillage</a> images: the share of photos where one of the first two candidate problems matches the true disease, plus a separate score for healthy plants.</p>
+
+    <h2>How the test runs</h2>
+    <ol>
+      <li>Put 30–50 labelled images in <code>test/images/</code>, named like <code>Tomato___Late_blight__01.jpg</code>.</li>
+      <li>Run the harness against the same model the app uses.</li>
+      <li>Review every row by hand: the automatic match is keyword-based and deliberately loose.</li>
+    </ol>
+    <pre><code>GEMINI_API_KEY=your_key node test/run-eval.mjs</code></pre>
+    <p class="hint">The harness writes <code>test/accuracy-results.md</code>. Until that file has a table, this page keeps saying “Not yet measured”.</p>
+
+    <h2>Why the number will not be 100%</h2>
+    <ul>
+      <li>Lab images are cleaner than a phone photo taken in a field.</li>
+      <li>Several diseases share symptoms, and nutrient problems can look like disease.</li>
+      <li>The model is asked to be honest about uncertainty, so it sometimes asks for another photo instead of guessing.</li>
+    </ul>
+    <p>That is why every result shows a confidence figure, a “not sure yet” state, and a reminder to ask a local extension officer for serious problems.</p>
+
+    <h2>Check it yourself</h2>
+    <p>Every scan is a test: photograph the same plant again after a week and compare. LeafDoc keeps past scans on your device so you can see whether advice helped.</p>
+    <p><a href="./">Back to LeafDoc</a> · <a href="https://github.com/davo-richy/leafdoc/blob/main/test/accuracy-results.md" rel="noopener" target="_blank">Raw results file</a></p>
+  </main>
+
+  <footer class="foot">
+    <small>LeafDoc gives AI-generated guidance, not a laboratory diagnosis.</small>
+  </footer>
+</body>
+</html>
