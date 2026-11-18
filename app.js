@@ -1,4 +1,7 @@
 import { LANGUAGES, DEFAULT_LANG, language, t, applyStaticText } from "./js/i18n.js";
+import { queueAdd, queueAll, queueCount, queueRemove } from "./js/queue.js";
+import { triageFor } from "./js/triage.js";
+import { buildCard, cardFileName } from "./js/card.js";
 
 const MAX_PHOTOS = 4;
 const TIMEOUT_MS = 25000;      // a diagnosis slower than this is treated as a timeout
@@ -25,6 +28,8 @@ const state = {
   weatherFailed: false,
   compareFrom: null,
   pendingAnswers: [],
+  plantFilter: null,
+  resultFromQueue: false,
 };
 
 // ---------- safe storage ----------
@@ -34,6 +39,19 @@ const store = {
   raw(k) { try { return localStorage.getItem(k); } catch { return null; } },
   setRaw(k, v) { try { localStorage.setItem(k, v); } catch { /* storage full or blocked */ } },
 };
+
+// ---------- settings kept on this device ----------
+const settings = {
+  region: store.raw("leafdoc.region") || "Nigeria",
+  lowData: store.raw("leafdoc.lowdata") === "1",
+  audio: store.raw("leafdoc.audio") === "1",
+};
+
+function saveSettings() {
+  store.setRaw("leafdoc.region", settings.region);
+  store.setRaw("leafdoc.lowdata", settings.lowData ? "1" : "0");
+  store.setRaw("leafdoc.audio", settings.audio ? "1" : "0");
+}
 
 // ---------- small transient message (replaces alert()) ----------
 let toastTimer = null;
@@ -121,6 +139,14 @@ function init() {
     store.setRaw("leafdoc.theme", next);
   };
 
+  $("regionSel").value = settings.region;
+  $("lowData").checked = settings.lowData;
+  $("audioFirst").checked = settings.audio;
+  $("regionSel").onchange = () => { settings.region = $("regionSel").value; saveSettings(); };
+  $("lowData").onchange = () => { settings.lowData = $("lowData").checked; saveSettings(); };
+  $("audioFirst").onchange = () => { settings.audio = $("audioFirst").checked; saveSettings(); };
+  $("queueSend").onclick = () => flushQueue(true);
+
   if (!store.raw("leafdoc.onboarded")) show("onboard");
   $("onboardOk").onclick = () => { store.setRaw("leafdoc.onboarded", "1"); hide("onboard"); };
 
@@ -139,7 +165,10 @@ function init() {
   $("newBtn").onclick = resetAll;
   $("speakBtn").onclick = speak;
   $("stopBtn").onclick = stopSpeak;
-  $("shareBtn").onclick = saveReport;
+  $("printBtn").onclick = saveReport;
+  $("waBtn").onclick = shareWhatsApp;
+  $("imgBtn").onclick = saveCardImage;
+  $("shareBtn").onclick = saveCardImage;
   $("icsBtn").onclick = downloadIcs;
   $("chatBtn").onclick = askChat;
   $("chatInput").addEventListener("keydown", (e) => { if (e.key === "Enter") askChat(); });
@@ -153,6 +182,7 @@ function init() {
   $("clearNo").onclick = () => { hide("clearConfirm"); show("clearHistory"); };
   $("clearYes").onclick = () => {
     store.set(HIST_KEY, []);
+    state.plantFilter = null;
     hide("clearConfirm");
     renderHistory();
   };
@@ -163,6 +193,7 @@ function init() {
   window.addEventListener("online", netUpdate);
   window.addEventListener("offline", netUpdate);
   netUpdate();
+  renderQueue();
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {});
@@ -177,6 +208,7 @@ function applyTheme(theme) {
 
 function netUpdate() {
   $("netStatus").classList.toggle("hidden", navigator.onLine);
+  if (navigator.onLine) flushQueue();
 }
 
 // ---------- photos ----------
@@ -399,41 +431,121 @@ function postJson(path, payload, ms = TIMEOUT_MS) {
   }).finally(() => clearTimeout(timer));
 }
 
-async function diagnose(answers = []) {
-  if (state.busy) return;
-  if (!state.photos.length) { showProblem("need_photo"); return; }
-  if (!navigator.onLine) { showProblem("offline"); return; }
+// ---------- request payload ----------
+// Low-data mode re-encodes at 640px on demand, so it also applies to photos added earlier.
+function shrink(photo, max = 640, quality = 0.55) {
+  if (photo.small) return Promise.resolve(photo.small);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      photo.small = c.toDataURL("image/jpeg", quality).split(",")[1];
+      resolve(photo.small);
+    };
+    img.onerror = () => resolve(photo.data);
+    img.src = photo.preview;
+  });
+}
 
-  state.pendingAnswers = answers;
+async function buildPayload(answers) {
+  const images = [];
+  for (const p of state.photos) {
+    images.push({ mime: "image/jpeg", data: settings.lowData ? await shrink(p) : p.data });
+  }
+  return {
+    images,
+    language: state.lang,
+    notes: $("notes").value.trim(),
+    answers,
+    weather: state.weatherText,
+    region: settings.region,
+  };
+}
+
+// ---------- offline queue ----------
+async function queueCurrent(answers, payload) {
+  try {
+    const saved = payload || await buildPayload(answers);
+    await queueAdd({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, ts: Date.now(), answers, payload: saved }, 2);
+    await renderQueue();
+    toast("Saved on this phone. It will send when you are back online.");
+  } catch {
+    showProblem("offline");
+  }
+}
+
+async function renderQueue() {
+  try {
+    const n = await queueCount();
+    if (!n) { hide("queueNote"); return; }
+    $("queueText").textContent = n === 1
+      ? "1 scan is saved on this phone and will send when you are online."
+      : `${n} scans are saved on this phone and will send when you are online.`;
+    show("queueNote");
+  } catch {
+    hide("queueNote");
+  }
+}
+
+let flushing = false;
+
+async function flushQueue(manual = false) {
+  if (flushing || state.busy || !navigator.onLine) {
+    if (manual && !navigator.onLine) toast(t(state.lang, "err_offline"));
+    return;
+  }
+  let jobs = [];
+  try { jobs = await queueAll(); } catch { return; }
+  if (!jobs.length) { renderQueue(); return; }
+
+  flushing = true;
   setLoading(true);
-  await loadWeather();
-  setLoadingText(t(state.lang, "loading2"));
+  setLoadingText("Sending the scan saved on this phone");
+  let last = null;
+  for (const job of jobs) {
+    const outcome = await runDiagnosis(job.payload);
+    if (!outcome.ok) {
+      setLoading(false);
+      flushing = false;
+      // Keep the job: a bad key or a timeout should not throw away the grower's photos.
+      if (!outcome.offline) showProblem(outcome.reason, outcome.extra);
+      renderQueue();
+      return;
+    }
+    await queueRemove(job.id);
+    last = { data: outcome.data, answers: job.answers || [] };
+  }
+  setLoading(false);
+  flushing = false;
+  renderQueue();
+  if (last) {
+    handleResult(last.data, last.answers, { fromQueue: true });
+    toast("Sent the scan saved on this phone.");
+  }
+}
 
+// ---------- network ----------
+async function runDiagnosis(payload) {
   let busyAttempts = 0;   // 429 retries
   let netAttempts = 0;    // dropped-connection retries
   let jsonAttempts = 0;   // unparseable reply retries
 
   for (;;) {
     try {
-      const res = await postJson("api/diagnose", {
-        images: state.photos.map((p) => ({ mime: p.mime, data: p.data })),
-        language: state.lang,
-        notes: $("notes").value.trim(),
-        answers,
-        weather: state.weatherText,
-      });
-
+      const res = await postJson("api/diagnose", payload);
       const data = await res.json().catch(() => null);
 
       if (!data || typeof data !== "object") {
         // A proxy or crash returned HTML: retry once silently, then tell the user.
         if (jsonAttempts < 1) { jsonAttempts++; await wait(800); continue; }
-        setLoading(false);
-        showProblem("json");
-        return;
+        return { ok: false, reason: "json" };
       }
 
-      if (res.ok) { setLoading(false); handleResult(data, answers); return; }
+      if (res.ok) return { ok: true, data };
 
       // Rate limited: retry twice with exponential backoff, then explain.
       if (res.status === 429 && busyAttempts < MAX_BUSY_RETRIES) {
@@ -443,24 +555,45 @@ async function diagnose(answers = []) {
         continue;
       }
 
-      setLoading(false);
       const reason = SERVER_CODES[data.error] || "request";
       // Keep the localized wording; only fall back to the server's text when we have no mapping.
-      showProblem(reason, reason === "request" ? { text: data.message } : {});
-      return;
+      return { ok: false, reason, extra: reason === "request" ? { text: data.message } : {} };
     } catch (err) {
-      if (err && err.name === "AbortError") { setLoading(false); showProblem("timeout"); return; }
-      if (!navigator.onLine) { setLoading(false); showProblem("offline"); return; }
+      if (err && err.name === "AbortError") return { ok: false, reason: "timeout" };
+      if (!navigator.onLine) return { ok: false, offline: true };
       // One silent retry for a dropped connection, then explain.
       if (netAttempts < 1) { netAttempts++; await wait(1200); continue; }
-      setLoading(false);
-      showProblem("network");
-      return;
+      return { ok: false, reason: "network" };
     }
   }
 }
 
-function handleResult(r, answers) {
+async function diagnose(answers = []) {
+  if (state.busy) return;
+  if (!state.photos.length) { showProblem("need_photo"); return; }
+
+  state.pendingAnswers = answers;
+
+  if (!navigator.onLine) {
+    await queueCurrent(answers);
+    return;
+  }
+
+  const payload = await buildPayload(answers);
+  setLoading(true);
+  await loadWeather();
+  setLoadingText(t(state.lang, "loading2"));
+  payload.weather = state.weatherText;
+
+  const outcome = await runDiagnosis(payload);
+  setLoading(false);
+
+  if (outcome.ok) { handleResult(outcome.data, answers); return; }
+  if (outcome.offline) { await queueCurrent(answers, payload); return; }
+  showProblem(outcome.reason, outcome.extra);
+}
+
+function handleResult(r, answers, opts = {}) {
   if (r.photo_ok === false || r.is_plant === false) {
     showProblem(r.is_plant === false ? "plant" : "photo", {
       text: r.photo_issue || t(state.lang, "err_photo_text"),
@@ -472,9 +605,11 @@ function handleResult(r, answers) {
   }
   state.result = r;
   state.answers = answers;
+  state.resultFromQueue = !!opts.fromQueue;
   renderResult();
   saveHistory();
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (settings.audio) speak();
 }
 
 function recheck() {
@@ -490,6 +625,7 @@ const list = (arr) => (Array.isArray(arr) ? arr.filter(Boolean) : []);
 function renderResult() {
   const r = state.result;
   hide("capture"); hide("history"); hide("problem"); show("result");
+  $("fromQueue").classList.toggle("hidden", !state.resultFromQueue);
 
   $("plantName").textContent = r.plant || "Unknown plant";
   $("summary").textContent = r.summary || "";
@@ -497,25 +633,35 @@ function renderResult() {
   const conf = Math.max(0, Math.min(100, Number(r.overall_confidence) || 0));
   $("confNum").textContent = conf + "%";
   $("confBar").style.width = conf + "%";
-  $("confBar").parentElement.classList.toggle("low", conf < 65);
+  $("confBar").parentElement.classList.toggle("low", conf < 60);
 
   const status = $("statusPill");
   status.className = "status";
   if (r.healthy) { status.textContent = "Looks healthy"; status.classList.add("is-ok"); }
-  else if (r.needs_more_info || conf < 65) { status.textContent = t(state.lang, "notSure"); status.classList.add("is-warn"); }
+  else if (r.needs_more_info || conf < 60) { status.textContent = t(state.lang, "notSure"); status.classList.add("is-warn"); }
   else {
     const sev = (r.problems?.[0]?.severity || "").toLowerCase();
     status.textContent = sev === "high" ? "Serious" : sev === "low" ? "Mild" : "Needs attention";
     status.classList.add(sev === "high" ? "is-bad" : sev === "low" ? "is-ok" : "is-warn");
   }
 
+  // Below 60% we say so in plain words instead of dressing up a guess.
+  const low = !r.healthy && conf < 60;
+  const confNote = $("confNote");
+  confNote.textContent = low
+    ? `Low confidence (${conf}%). Treat this as a guess: add one clear photo in daylight or answer the questions below.`
+    : "";
+  confNote.classList.toggle("hidden", !low);
+
   const urgent = $("urgent");
   urgent.textContent = r.urgent_note || "";
   urgent.classList.toggle("hidden", !r.urgent_note);
 
+  renderTriage(r);
+
   // follow-up questions
   const qs = list(r.follow_up_questions);
-  const needs = (r.needs_more_info || conf < 65) && qs.length > 0;
+  const needs = (r.needs_more_info || conf < 60) && qs.length > 0;
   $("followCard").classList.toggle("hidden", !needs);
   const form = $("followForm");
   form.replaceChildren();
@@ -591,6 +737,24 @@ function renderResult() {
   renderCompare();
   updateVoiceNote();
   stopSpeak();
+}
+
+function renderTriage(r) {
+  const tri = triageFor(r);
+  state.triage = tri;
+  const card = $("triageCard");
+  card.className = "block triage is-" + tri.level;
+  $("triageTitle").textContent = tri.title;
+  $("triageLine").textContent = tri.line;
+  const steps = $("triageSteps");
+  steps.replaceChildren();
+  tri.steps.forEach((step) => {
+    const li = document.createElement("li");
+    li.textContent = step;
+    steps.append(li);
+  });
+  $("eatNote").textContent = tri.eat;
+  $("eatNote").classList.toggle("hidden", !tri.eat);
 }
 
 function renderTreatment() {
@@ -805,10 +969,15 @@ function closeHistory() {
 function renderHistory() {
   const box = $("historyList");
   box.replaceChildren();
-  const history = store.get(HIST_KEY, []);
+  const all = store.get(HIST_KEY, []);
+  const history = state.plantFilter
+    ? all.filter((it) => (it.plant || "Unknown plant") === state.plantFilter)
+    : all;
+
+  renderPlants(all);
 
   // Empty state owns the panel: no list, no clear button.
-  const empty = history.length === 0;
+  const empty = all.length === 0;
   $("historyEmpty").classList.toggle("hidden", !empty);
   $("clearWrap").classList.toggle("hidden", empty);
   hide("clearConfirm");
@@ -834,6 +1003,7 @@ function renderHistory() {
     const open = () => {
       state.result = it.result;
       state.answers = [];
+      state.resultFromQueue = false;
       hide("history");
       renderResult();
     };
@@ -849,6 +1019,53 @@ function renderHistory() {
     row.append(rescan);
     box.append(row);
   });
+}
+
+function plantStatus(result) {
+  if (!result) return "";
+  if (result.healthy) return "Healthy";
+  const top = Array.isArray(result.problems) ? result.problems[0] : null;
+  return top && top.name ? top.name : "Not clear";
+}
+
+function renderPlants(history) {
+  const wrap = $("plantsWrap");
+  const list = $("plantsList");
+  list.replaceChildren();
+
+  if (history.length < 2) { hide("plantsWrap"); return; }
+
+  const groups = new Map();
+  history.forEach((it) => {
+    const name = (it.plant || "Unknown plant").trim();
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(it);
+  });
+
+  const locale = language(state.lang).locale;
+  groups.forEach((items, name) => {
+    const latest = items[0];
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "plant-row" + (state.plantFilter === name ? " active" : "");
+    row.setAttribute("aria-pressed", String(state.plantFilter === name));
+
+    const label = document.createElement("span");
+    label.className = "plant-name";
+    label.textContent = name;
+
+    const meta = document.createElement("span");
+    meta.className = "hint";
+    meta.textContent = `${items.length} scan${items.length === 1 ? "" : "s"} · ${plantStatus(latest.result)} · ${new Date(latest.ts).toLocaleDateString(locale)}`;
+
+    row.append(label, meta);
+    row.onclick = () => {
+      state.plantFilter = state.plantFilter === name ? null : name;
+      renderHistory();
+    };
+    list.append(row);
+  });
+  show("plantsWrap");
 }
 
 // ---------- report ----------
@@ -873,6 +1090,66 @@ ${r.weather_advice ? `<h2>Weather note</h2><p>${esc(r.weather_advice)}</p>` : ""
   w.document.write(html);
   w.document.close();
   setTimeout(() => w.print(), 300);
+}
+
+// ---------- sharing ----------
+function shareSummary() {
+  const r = state.result;
+  if (!r) return "";
+  const tri = triageFor(r);
+  const lines = [
+    `LeafDoc · ${r.plant || "Plant"}`,
+    `${tri.title}${tri.top ? `: ${tri.top}` : ""}`,
+    r.summary || "",
+    ...tri.steps.slice(0, 3).map((s) => `- ${s}`),
+    tri.eat,
+    `Confidence ${Math.round(tri.confidence)}%. Not a lab test.`,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+async function shareWhatsApp() {
+  const text = shareSummary();
+  if (!text) return;
+  if (navigator.share) {
+    try { await navigator.share({ title: "LeafDoc", text }); return; }
+    catch (err) { if (err && err.name === "AbortError") return; }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+}
+
+async function saveCardImage() {
+  const r = state.result;
+  if (!r) return;
+  const btn = $("imgBtn");
+  if (btn) btn.disabled = true;
+  try {
+    const blob = await buildCard({
+      result: r,
+      triage: triageFor(r),
+      meta: language(state.lang),
+      date: new Date().toLocaleDateString(language(state.lang).locale),
+    });
+    const name = cardFileName(r);
+    const file = new File([blob], name, { type: "image/png" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "LeafDoc" }); return; }
+      catch (err) { if (err && err.name === "AbortError") return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast("Image saved.");
+  } catch {
+    toast("Could not make the image on this device.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ---------- reset ----------
