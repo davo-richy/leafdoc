@@ -664,6 +664,7 @@ input[type="text"]:hover { border-color: var(--muted); }
 }
 .foot small { display: block; }
 .foot a { color: var(--accent-text); }
+.hint a, .disclaimer a, .notice a { color: inherit; text-decoration: underline; }
 #netStatus {
   display: block;
   margin: 0 0 var(--s3);
@@ -692,6 +693,70 @@ input[type="text"]:hover { border-color: var(--muted); }
   font-size: 14px;
   line-height: 1.4;
 }
+
+/* ---------- phase 3: options, queue, triage, plants ---------- */
+.select {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--s3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+.check + .check { margin-top: var(--s2); }
+
+.notice-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-top: var(--s4);
+  font-weight: 400;
+}
+.notice-action p { margin: 0; flex: 1 1 220px; }
+.notice-action .btn { flex: none; }
+
+.triage {
+  border-left: 3px solid var(--accent);
+  padding-left: var(--s4);
+  margin-left: 1px;
+}
+.triage.is-week { border-left-color: var(--amber); }
+.triage.is-today { border-left-color: var(--red); }
+.triage.is-today h2 { color: var(--red); }
+.triage.is-week h2 { color: var(--amber); }
+.triage.is-monitor h2 { color: var(--accent-text); }
+.triage-steps { margin: var(--s3) 0 0; padding-left: var(--s5); }
+.triage-steps li { margin-bottom: var(--s2); }
+#eatNote { margin-top: var(--s3); }
+
+.plants { margin: 0 0 var(--s3); }
+.plant-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s1) var(--s3);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s2) var(--s3);
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.plant-row:hover { background: var(--hover); }
+.plant-row.active { background: var(--accent-soft); }
+.plant-row .plant-name { font-weight: 600; }
+.plant-row .hint { margin: 0; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 400px) {
