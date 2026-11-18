@@ -55,7 +55,7 @@ Photo(s) → photo-quality check → Gemini vision analysis
 |---|---|
 | Frontend | HTML, CSS, vanilla JavaScript (no framework) |
 | Backend | Vercel serverless function (Node.js) |
-| AI | Google Gemini API (`gemini-flash-latest`, vision, structured JSON output) |
+| AI | Google Gemini API (`gemini-3.8-flash`, vision, structured JSON output) |
 | Weather | Open-Meteo API (no key needed) |
 | Voice | Browser Web Speech API |
 | Offline | Service worker + web manifest |
@@ -95,7 +95,8 @@ Open the local URL on a phone or desktop and upload a plant photo. Get a free ke
 
 1. Push the repo to GitHub.
 2. Import it in Vercel and leave **Root Directory** empty (the project root *is* the site root).
-3. Add `GEMINI_API_KEY` under Project Settings → Environment Variables, then redeploy.
+3. Add `GEMINI_API_KEY` under Project Settings → Environment Variables for **Production** (and Preview), then redeploy — environment variables only take effect on builds created after they are added.
+4. Optional: set `GEMINI_MODEL` to pin a different model. The app tries `gemini-3.8-flash`, `gemini-3.6-flash`, `gemini-3.5-flash-lite`, then `gemini-flash-latest`.
 
 ## Credits and licenses
 
