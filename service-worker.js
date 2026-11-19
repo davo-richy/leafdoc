@@ -1,5 +1,5 @@
-const CACHE = "leafdoc-shell-v6";
-const SHELL = ["./", "index.html", "accuracy.html", "style.css?v=6", "app.js?v=6", "js/i18n.js", "js/triage.js", "js/queue.js", "js/card.js", "manifest.json", "icon.svg", "icon-192.png", "icon-512.png"];
+const CACHE = "leafdoc-shell-v7";
+const SHELL = ["./", "index.html", "accuracy.html", "style.css?v=7", "app.js?v=7", "js/i18n.js", "js/triage.js", "js/queue.js", "js/card.js", "manifest.json", "icon.svg", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
   // Cache each file separately so one missing file can't break the whole install

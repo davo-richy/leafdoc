@@ -1,10 +1,8 @@
 import { callGemini } from "../lib/gemini.js";
 import { rateLimit, errorReply } from "../lib/guard.js";
+import { validateImages } from "../lib/images.js";
 
 export const config = { maxDuration: 60 };
-
-const MAX_IMAGES = 4;
-const MAX_B64_CHARS = 2_000_000; // ~1.5MB per image after client-side resize
 
 // Fixed list: the region is dropped into the prompt, so it must not be free text.
 const REGIONS = ["Nigeria", "Ghana", "Kenya", "Uganda", "Tanzania", "South Africa", "India", "Brazil", "United States", "United Kingdom", "Other"];
@@ -15,20 +13,20 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "method_not_allowed" });
   }
 
-  if (!rateLimit(req)) return res.status(429).json({ error: "rate_limited", message: "Too many scans from this connection. Please wait a few minutes and try again." });
+  if (!rateLimit(req, { max: 10, bucket: "diagnose" })) {
+    res.setHeader("Retry-After", "600");
+    return res.status(429).json({ error: "rate_limited", message: "Too many scans from this connection. Please wait a few minutes and try again." });
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "server_not_configured", message: "GEMINI_API_KEY is not set." });
 
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
-    const images = Array.isArray(body.images) ? body.images.slice(0, MAX_IMAGES) : [];
-    if (!images.length) return res.status(400).json({ error: "no_image", message: "Please add at least one photo." });
-    for (const img of images) {
-      if (typeof img?.data !== "string" || img.data.length > MAX_B64_CHARS) {
-        return res.status(413).json({ error: "image_too_large", message: "Photo is too large. Try a smaller one." });
-      }
-    }
+
+    // Validates encoding, size and the real file type; never logs the photo.
+    const images = validateImages(body.images);
+    if (!images.ok) return res.status(images.status).json({ error: images.error, message: images.message });
 
     const clean = (s, n) => (typeof s === "string" ? s.slice(0, n) : "");
     const answers = Array.isArray(body.answers)
@@ -40,7 +38,7 @@ export default async function handler(req, res) {
       model: process.env.GEMINI_MODEL,
       language: clean(body.language, 40) || "English",
       region: REGIONS.includes(body.region) ? body.region : "",
-      images: images.map((i) => ({ mime: clean(i.mime, 30) || "image/jpeg", data: i.data })),
+      images: images.images,
       notes: clean(body.notes, 800),
       answers,
       weather: clean(body.weather, 400),

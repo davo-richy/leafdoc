@@ -8,7 +8,10 @@ export default async function handler(req, res) {
     res.setHeader("Allow", "POST");
     return res.status(405).json({ error: "method_not_allowed" });
   }
-  if (!rateLimit(req, { max: 20 })) return res.status(429).json({ error: "rate_limited", message: "Too many questions. Please wait a few minutes." });
+  if (!rateLimit(req, { max: 20, bucket: "chat" })) {
+    res.setHeader("Retry-After", "600");
+    return res.status(429).json({ error: "rate_limited", message: "Too many questions. Please wait a few minutes." });
+  }
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "server_not_configured", message: "GEMINI_API_KEY is not set." });
 
