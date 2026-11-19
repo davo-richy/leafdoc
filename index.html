@@ -5,12 +5,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>LeafDoc – plant diagnosis in your language</title>
   <meta name="description" content="Photograph a sick plant and get likely problems, treatment and prevention advice in your own language. Free, works on a phone, keeps your scans on your device." />
+  <link rel="canonical" href="https://leafdocc.vercel.app/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="LeafDoc" />
+  <meta property="og:title" content="LeafDoc – plant diagnosis in your language" />
+  <meta property="og:description" content="Photograph a sick plant. Get likely causes, what to do today, and how to stop it coming back — in 12 languages, by text or voice." />
+  <meta property="og:url" content="https://leafdocc.vercel.app/" />
+  <meta property="og:image" content="https://leafdocc.vercel.app/icon-512.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
+  <meta property="og:image:alt" content="LeafDoc: photograph a sick plant, get a treatment plan in your language." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="LeafDoc – plant diagnosis in your language" />
+  <meta name="twitter:description" content="Photograph a sick plant. Get likely causes, what to do today, and how to stop it coming back — in 12 languages, by text or voice." />
+  <meta name="twitter:image" content="https://leafdocc.vercel.app/icon-512.png" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#f7f7f4" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#131411" media="(prefers-color-scheme: dark)" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192" />
+  <link rel="icon" href="icon-512.png" type="image/png" sizes="512x512" />
+  <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192" />
   <script>
     // Set the theme before first paint so a dark-mode user never sees a white flash.
     try {
@@ -25,7 +42,7 @@
     main{max-width:640px;margin:0 auto;padding:24px 16px 48px}
     .hidden{display:none!important}
   </style>
-  <link rel="stylesheet" href="style.css?v=6" />
+  <link rel="stylesheet" href="style.css?v=7" />
 </head>
 <body>
   <!-- 20px, 1.5px-stroke icons. Inline so they need no network request or library. -->
@@ -380,6 +397,6 @@
 
   <p id="toast" class="toast hidden" role="status" aria-live="polite"></p>
 
-  <script type="module" src="app.js?v=6"></script>
+  <script type="module" src="app.js?v=7"></script>
 </body>
 </html>
